@@ -1,0 +1,19 @@
+FROM mysql:8.0
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 设置MySQL配置
+ENV MYSQL_ROOT_PASSWORD=123456
+ENV MYSQL_DATABASE=ticketdb
+
+# 复制初始化SQL脚本
+COPY ./Database/Createdb.sql /docker-entrypoint-initdb.d/1_init.sql
+COPY ./Database/InitData.sql /docker-entrypoint-initdb.d/2_initdata.sql
+
+# 暴露端口
+EXPOSE 3306
+
+# 设置字符集
+CMD ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]

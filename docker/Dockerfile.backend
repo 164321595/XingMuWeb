@@ -1,0 +1,65 @@
+# 第一阶段：构建后端应用
+FROM golang:1.25-alpine AS builder
+
+# 安装必要工具、时区数据和字体
+RUN apk add --no-cache git tzdata font-noto-cjk
+
+# 设置中文UTF-8编码环境
+ENV LANG zh_CN.UTF-8
+ENV LC_ALL zh_CN.UTF-8
+ENV LANGUAGE zh_CN:zh
+
+# 创建语言环境配置文件并更新系统编码
+RUN echo "LANG=zh_CN.UTF-8" > /etc/locale.conf && \
+    echo "LC_ALL=zh_CN.UTF-8" >> /etc/locale.conf
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制go.mod和go.sum
+COPY ./Backend/go.mod ./Backend/go.sum ./
+
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY ./Backend .
+
+# 编译后端应用
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ticket-system-backend main.go
+
+# 第二阶段：创建运行时镜像
+FROM alpine:3.19
+
+# 安装必要的包、时区数据、字体和字符集支持
+RUN apk add --no-cache ca-certificates tzdata font-noto-cjk
+
+# 设置中文UTF-8编码环境
+ENV LANG zh_CN.UTF-8
+ENV LC_ALL zh_CN.UTF-8
+ENV LANGUAGE zh_CN:zh
+
+# 创建语言环境配置文件并更新系统编码
+RUN echo "LANG=zh_CN.UTF-8" > /etc/locale.conf && \
+    echo "LC_ALL=zh_CN.UTF-8" >> /etc/locale.conf
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制编译后的二进制文件
+COPY --from=builder /app/ticket-system-backend .
+
+# 复制配置文件
+COPY ./Backend/config ./config
+
+# 复制uploads目录
+COPY ./Backend/uploads ./uploads
+
+# 暴露端口
+EXPOSE 8080
+
+# 设置环境变量
+ENV GIN_MODE=release
+
+# 启动后端服务
+CMD ["./ticket-system-backend"]
