@@ -70,7 +70,13 @@ func (oc *OrderController) GetUserOrders(c *gin.Context) {
 	// 获取查询参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
-	status, _ := strconv.Atoi(c.DefaultQuery("status", "0"))
+	
+	// 获取status参数，不设置默认值，当参数不存在时为-1
+	statusStr := c.Query("status")
+	status := -1 // -1表示获取所有状态的订单
+	if statusStr != "" {
+		status, _ = strconv.Atoi(statusStr)
+	}
 
 	// 构建查询条件
 	query := model.OrderQuery{
