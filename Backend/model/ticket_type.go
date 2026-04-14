@@ -47,3 +47,32 @@ func DecreaseStock(ticketTypeID, quantity int) error {
 func IncreaseStock(ticketTypeID, quantity int) error {
 	return util.DB.Exec("UPDATE ticket_type SET stock = stock + ? WHERE id = ?", quantity, ticketTypeID).Error
 }
+
+// GetAllTicketTypes 获取所有票种
+func GetAllTicketTypes(page, size int) ([]TicketType, int, error) {
+	var ticketTypes []TicketType
+	var total int
+
+	util.DB.Model(&TicketType{}).Count(&total)
+
+	offset := (page - 1) * size
+	err := util.DB.Offset(offset).Limit(size).Order("created_at desc").Find(&ticketTypes).Error
+
+	return ticketTypes, total, err
+}
+
+// CreateTicketType 创建票种
+func CreateTicketType(ticketType *TicketType) error {
+	return util.DB.Create(ticketType).Error
+}
+
+// UpdateTicketType 更新票种
+func UpdateTicketType(ticketType *TicketType) error {
+	ticketType.UpdatedAt = time.Now()
+	return util.DB.Model(ticketType).Updates(ticketType).Error
+}
+
+// DeleteTicketType 删除票种
+func DeleteTicketType(id int) error {
+	return util.DB.Delete(&TicketType{}, "id = ?", id).Error
+}

@@ -1,0 +1,48 @@
+# 环境配置（包含敏感信息）
+.env
+.env.local
+.env.production
+
+# 上传文件
+uploads/
+uploads/*
+
+# 允许追踪 avatars 目录但排除内容
+uploads/avatars/*
+!uploads/avatars/.gitkeep
+
+# 允许追踪 covers 目录但排除内容
+uploads/covers/*
+!uploads/covers/.gitkeep
+
+# 编译输出
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+ticket-system-backend
+
+# 测试输出
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+logs/
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 构建产物
+dist/
+build/
+bin/

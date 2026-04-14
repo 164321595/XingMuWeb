@@ -1,9 +1,7 @@
-import type { ApiResponse, PaginationResult } from '@/types';
+import type { ApiResponse } from '@/types';
 
-// API基础URL，根据实际后端地址修改
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
-// 状态码定义
 export const StatusCode = {
   SUCCESS: 200,
   BAD_REQUEST: 400,
@@ -15,6 +13,10 @@ export const StatusCode = {
   USER_PASSWORD_ERROR: 1002,
   USER_INFO_ERROR: 1003,
   USER_AVATAR_ERROR: 1004,
+  USER_PASSWORD_CHANGE_ERROR: 1005,
+  USER_DATA_EXPORT_ERROR: 1006,
+  USER_DATA_DELETE_ERROR: 1007,
+  PRIVACY_SETTINGS_ERROR: 1008,
   PERFORMANCE_NOT_EXIST: 2001,
   PERFORMANCE_NOT_ON_SALE: 2002,
   TICKET_NOT_EXIST: 3001,
@@ -25,14 +27,11 @@ export const StatusCode = {
   ORDER_EXPIRED: 4002,
   ORDER_STATUS_ERROR: 4003,
   ORDER_DUPLICATE: 4004,
-  SETTINGS_UPDATE_FAILED: 5001,
-  DATA_EXPORT_FAILED: 5002,
-  DATA_DELETE_FAILED: 5003,
+  PAYMENT_ERROR: 4005,
   RATE_LIMIT_EXCEEDED: 6001,
   SYSTEM_MAINTENANCE: 6002
 };
 
-// 状态码对应的消息
 export const StatusMessage = {
   [StatusCode.SUCCESS]: 'success',
   [StatusCode.BAD_REQUEST]: '请求参数错误',
@@ -44,6 +43,10 @@ export const StatusMessage = {
   [StatusCode.USER_PASSWORD_ERROR]: '用户名或密码错误',
   [StatusCode.USER_INFO_ERROR]: '用户信息格式错误',
   [StatusCode.USER_AVATAR_ERROR]: '头像上传失败',
+  [StatusCode.USER_PASSWORD_CHANGE_ERROR]: '密码修改失败',
+  [StatusCode.USER_DATA_EXPORT_ERROR]: '数据导出失败',
+  [StatusCode.USER_DATA_DELETE_ERROR]: '数据删除失败',
+  [StatusCode.PRIVACY_SETTINGS_ERROR]: '隐私设置错误',
   [StatusCode.PERFORMANCE_NOT_EXIST]: '演出不存在',
   [StatusCode.PERFORMANCE_NOT_ON_SALE]: '演出未开售',
   [StatusCode.TICKET_NOT_EXIST]: '票种不存在',
@@ -54,30 +57,54 @@ export const StatusMessage = {
   [StatusCode.ORDER_EXPIRED]: '订单已过期',
   [StatusCode.ORDER_STATUS_ERROR]: '订单状态错误',
   [StatusCode.ORDER_DUPLICATE]: '不能重复创建订单',
-  [StatusCode.SETTINGS_UPDATE_FAILED]: '设置更新失败',
-  [StatusCode.DATA_EXPORT_FAILED]: '数据导出失败',
-  [StatusCode.DATA_DELETE_FAILED]: '数据删除失败',
+  [StatusCode.PAYMENT_ERROR]: '支付失败',
   [StatusCode.RATE_LIMIT_EXCEEDED]: '请求过于频繁，请稍后再试',
   [StatusCode.SYSTEM_MAINTENANCE]: '系统维护中，请稍后再试'
 };
 
-// 创建API请求头
 const createHeaders = (includeAuth = true): Headers => {
   const headers = new Headers();
   headers.append('Content-Type', 'application/json');
-  
+
   if (includeAuth) {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
     if (token) {
       headers.append('Authorization', `Bearer ${token}`);
     }
   }
-  
+
   return headers;
 };
 
-// 处理API响应
-const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> => {
+const handleResponse = async <T>(response: Response, url?: string): Promise<ApiResponse<T>> => {
+  if (response.status === 401) {
+    const isLoginRequest = url?.includes('/auth/login') || url?.includes('/login');
+    const currentPath = window.location.pathname;
+    const isAdminPage = currentPath.startsWith('/admin');
+    const isLoginPage = currentPath === '/admin/login';
+
+    if (!isLoginRequest) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('token');
+    }
+
+    if (isAdminPage && !isLoginPage && !isLoginRequest) {
+      window.location.href = '/admin/login';
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = { code: 401, message: isLoginRequest ? '用户名或密码错误' : '登录已过期，请重新登录' };
+    }
+
+    return {
+      code: 401,
+      message: data?.message || (isLoginRequest ? '用户名或密码错误' : '登录已过期，请重新登录')
+    } as ApiResponse<T>;
+  }
+
   let data;
   try {
     data = await response.json();
@@ -85,82 +112,91 @@ const handleResponse = async <T>(response: Response): Promise<ApiResponse<T>> =>
     data = { code: response.status, message: response.statusText };
   }
 
-  // 如果响应状态码不是200，抛出错误
   if (!response.ok) {
     const error = new Error(data?.message || 'API请求失败');
     (error as any).code = data?.code || response.status;
     throw error;
   }
-  
+
   return data;
 };
 
-// API请求封装
 const apiRequest = {
-  get: async <T>(url: string, includeAuth = true): Promise<ApiResponse<T>> => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+  get: async <T>(url: string, params?: any, includeAuth = true): Promise<ApiResponse<T>> => {
+    let fullUrl = `${API_BASE_URL}${url}`;
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, String(value));
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) {
+        fullUrl += `?${queryString}`;
+      }
+    }
+    const response = await fetch(fullUrl, {
       method: 'GET',
       headers: createHeaders(includeAuth),
       credentials: 'include'
     });
-    
-    return handleResponse<T>(response);
+
+    return handleResponse<T>(response, fullUrl);
   },
-  
+
   post: async <T>(url: string, data?: any, includeAuth = true): Promise<ApiResponse<T>> => {
-    // 创建请求选项
     const options: RequestInit = {
       method: 'POST',
       credentials: 'include'
     };
 
-    // 处理请求头
     if (data instanceof FormData) {
-      // 对于FormData类型，不要设置Content-Type，让浏览器自动处理
       options.headers = new Headers();
       if (includeAuth) {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
         if (token) {
           options.headers.append('Authorization', `Bearer ${token}`);
         }
       }
       options.body = data;
     } else {
-      // 对于其他类型，使用默认的JSON头和序列化
       options.headers = createHeaders(includeAuth);
       options.body = data ? JSON.stringify(data) : undefined;
     }
 
-    const response = await fetch(`${API_BASE_URL}${url}`, options);
-    
-    return handleResponse<T>(response);
+    const requestUrl = `${API_BASE_URL}${url}`;
+    const response = await fetch(requestUrl, options);
+
+    return handleResponse<T>(response, requestUrl);
   },
-  
+
   put: async <T>(url: string, data?: any, includeAuth = true): Promise<ApiResponse<T>> => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const requestUrl = `${API_BASE_URL}${url}`;
+    const response = await fetch(requestUrl, {
       method: 'PUT',
       headers: createHeaders(includeAuth),
       body: data ? JSON.stringify(data) : undefined,
       credentials: 'include'
     });
-    
-    return handleResponse<T>(response);
+
+    return handleResponse<T>(response, requestUrl);
   },
-  
+
   delete: async <T>(url: string, includeAuth = true): Promise<ApiResponse<T>> => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const requestUrl = `${API_BASE_URL}${url}`;
+    const response = await fetch(requestUrl, {
       method: 'DELETE',
       headers: createHeaders(includeAuth),
       credentials: 'include'
     });
-    
-    return handleResponse<T>(response);
+
+    return handleResponse<T>(response, requestUrl);
   }
 };
 
-// 检查用户是否登录
 const checkAuth = (): boolean => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
   return !!token;
 };
 

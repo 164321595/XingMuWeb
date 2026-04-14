@@ -26,7 +26,6 @@ export default function Home() {
       setHotLoading(true);
       // 增加获取数量，确保有足够数据
       const hotRes = await performanceApi.getPerformances({ page: 1, size: 30 });
-      console.log('热门演出数据:', hotRes);
       if (hotRes.code === 200) {
         // 优化热门分数计算函数
         const calculatePopularityScore = (performance: Performance) => {

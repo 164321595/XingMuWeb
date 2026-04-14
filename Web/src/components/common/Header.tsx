@@ -13,20 +13,23 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
-    // 获取当前登录用户信息
     const fetchUserInfo = async () => {
       try {
         setLoading(true);
         const res = await userApi.getCurrentUser();
         if (res.code === 200) {
           setUser(res.data);
+        } else if (res.code === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
         } else {
           setUser(null);
         }
       } catch (error) {
-        // 只有当错误信息不包含"未认证"时才输出错误日志
-        if (!(error instanceof Error && error.message?.includes("未认证"))) {
-          console.error("获取用户信息失败", error);
+        if (error instanceof Error && error.message?.includes("record not found")) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
         }
         setUser(null);
       } finally {

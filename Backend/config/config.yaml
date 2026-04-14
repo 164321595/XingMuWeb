@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  mode: debug
+  host: 0.0.0.0
+
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+  username: root
+  password: ""
+  dbname: ticketdb
+  charset: utf8mb4
+  max_open_conns: 100
+  max_idle_conns: 20
+  conn_max_lifetime: 3600
+
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 100
+
+jwt:
+  secret: ""
+  expire: 7200
+
+cors:
+  allowed_origins:
+    - http://localhost:3000
+    - http://localhost
+
+upload:
+  path: ./uploads
+  max_size: 5242880
+  allowed_types:
+    - image/jpeg
+    - image/png
+    - image/gif
+
+seckill:
+  order_expire_minutes: 30
+  max_quantity_per_user: 5

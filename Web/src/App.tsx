@@ -16,6 +16,20 @@ import OrderDetail from "@/pages/OrderDetail";
 import UserProfile from "@/pages/UserProfile";
 import AccountSettings from "@/pages/AccountSettings";
 
+// 管理员页面导入
+import AdminLogin from "@/pages/admin/AdminLogin";
+import AdminLayout from "@/pages/admin/AdminLayout";
+import Dashboard from "@/pages/admin/Dashboard";
+import PerformanceList from "@/pages/admin/PerformanceList";
+import PerformanceForm from "@/pages/admin/PerformanceForm";
+import OrderList from "@/pages/admin/OrderList";
+import UserList from "@/pages/admin/UserList";
+import CategoryList from "@/pages/admin/CategoryList";
+import TicketTypeList from "@/pages/admin/TicketTypeList";
+import SystemSettings from "@/pages/admin/SystemSettings";
+import LogList from "@/pages/admin/LogList";
+import AdminList from "@/pages/admin/AdminList";
+
 // 错误边界组件
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 
@@ -29,6 +43,17 @@ const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// 管理员路由组件
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem('admin_token');
+
+  if (!token) {
+    return <Navigate to="/admin/login" replace />;
   }
 
   return <>{children}</>;
@@ -50,10 +75,6 @@ export default function App() {
         const res = await userApi.getCurrentUser();
         setIsAuthenticated(res.code === 200);
       } catch (error) {
-        // 未认证状态是正常现象，不显示错误信息
-        if (!(error instanceof Error && error.message.includes('未认证'))) {
-          console.error('检查登录状态失败', error);
-        }
         setIsAuthenticated(false);
       } finally {
         setLoading(false);
@@ -108,6 +129,26 @@ export default function App() {
             <AccountSettings />
           </PrivateRoute>
         } />
+
+        {/* 管理员路由 */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        }>
+          <Route index element={<Dashboard />} />
+          <Route path="performances" element={<PerformanceList />} />
+          <Route path="performances/create" element={<PerformanceForm />} />
+          <Route path="performances/:id/edit" element={<PerformanceForm />} />
+          <Route path="orders" element={<OrderList />} />
+          <Route path="users" element={<UserList />} />
+          <Route path="categories" element={<CategoryList />} />
+          <Route path="tickets" element={<TicketTypeList />} />
+          <Route path="settings" element={<SystemSettings />} />
+          <Route path="logs" element={<LogList />} />
+          <Route path="admins" element={<AdminList />} />
+        </Route>
 
         {/* 404路由 */}
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -4,142 +4,178 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"strings"
 
-	"github.com/go-ini/ini"
 	"github.com/spf13/viper"
 )
 
-// InitConfig 初始化配置文件
-func InitConfig() {
-	// 设置viper支持从环境变量读取配置
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("") // 不添加前缀
-	viper.AllowEmptyEnv(true)
-
-	// 获取当前工作目录
-	workDir, _ := os.Getwd()
-	configPath := filepath.Join(workDir, "config", "app.ini")
-
-	// 读取配置文件（如果存在）
-	var cfg *ini.File
-	if _, err := os.Stat(configPath); err == nil {
-		// 使用go-ini包读取配置文件
-		cfg, err = ini.Load(configPath)
-		if err != nil {
-			log.Printf("警告: 读取配置文件失败，但将继续使用环境变量: %v", err)
-		}
-	} else {
-		log.Printf("警告: 配置文件不存在，但将继续使用环境变量: %s", configPath)
-	}
-
-	// 服务器配置
-	serverPort := getEnv("SERVER_PORT", "")
-	if serverPort == "" && cfg != nil {
-		serverPort = cfg.Section("").Key("Port").MustString("8080")
-	}
-	viper.Set("server.port", serverPort)
-
-	serverMode := getEnv("SERVER_MODE", "")
-	if serverMode == "" && cfg != nil {
-		serverMode = cfg.Section("").Key("Mode").MustString("debug")
-	}
-	viper.Set("server.mode", serverMode)
-
-	// 数据库配置
-	dbHost := getEnv("DB_HOST", "")
-	dbPort := getEnv("DB_PORT", "")
-	dbUser := getEnv("DB_USER", "")
-	dbPassword := getEnv("DB_PASSWORD", "")
-	dbName := getEnv("DB_NAME", "")
-
-	// 默认值
-	if dbHost == "" {
-		dbHost = "127.0.0.1"
-	}
-	if dbPort == "" {
-		dbPort = "3306"
-	}
-	if dbUser == "" {
-		dbUser = "root"
-	}
-	if dbPassword == "" {
-		dbPassword = "123456"
-	}
-	if dbName == "" {
-		dbName = "ticketdb"
-	}
-
-	// 从配置文件获取默认值（如果环境变量未设置）
-	if cfg != nil {
-		if dbHost == "127.0.0.1" {
-			dbHost = "127.0.0.1"
-		}
-		if dbPassword == "123456" && cfg.Section("database").HasKey("Dsn") {
-			// 从DSN解析密码（如果需要）
-		}
-	}
-
-	// 构建DSN
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		dbUser, dbPassword, dbHost, dbPort, dbName)
-	viper.Set("database.type", "mysql")
-	viper.Set("database.username", dbUser)
-	viper.Set("database.dsn", dsn)
-	viper.Set("database.host", dbHost)
-	viper.Set("database.port", dbPort)
-	viper.Set("database.dbname", dbName)
-	viper.Set("database.charset", "utf8mb4")
-	viper.Set("database.parseTime", true)
-
-	// Redis配置
-	redisHost := getEnv("REDIS_HOST", "")
-	redisPort := getEnv("REDIS_PORT", "")
-	redisPassword := getEnv("REDIS_PASSWORD", "")
-	redisDB := getEnv("REDIS_DB", "")
-
-	if redisHost == "" {
-		redisHost = "127.0.0.1"
-	}
-	if redisPort == "" {
-		redisPort = "6379"
-	}
-
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort)
-	viper.Set("redis.Addr", redisAddr)
-	viper.Set("redis.Password", redisPassword)
-
-	redisDBInt := 0
-	if redisDB != "" {
-		// 转换为整数
-	}
-	viper.Set("redis.DB", redisDBInt)
-
-	// JWT配置
-	jwtSecret := getEnv("JWT_SECRET", "")
-	jwtExpire := getEnv("JWT_EXPIRE", "")
-
-	if jwtSecret == "" && cfg != nil {
-		jwtSecret = cfg.Section("jwt").Key("Secret").MustString("")
-	}
-	viper.Set("jwt.Secret", jwtSecret)
-
-	jwtExpireInt := 7200
-	if jwtExpire != "" {
-		// 转换为整数
-	} else if cfg != nil {
-		jwtExpireInt = cfg.Section("jwt").Key("Expire").MustInt(7200)
-	}
-	viper.Set("jwt.Expire", jwtExpireInt)
-
-	log.Println("配置加载成功")
+type Config struct {
+	Server   ServerConfig
+	Database DatabaseConfig
+	Redis    RedisConfig
+	JWT      JWTConfig
+	CORS     CORSConfig
+	Upload   UploadConfig
+	Seckill  SeckillConfig
 }
 
-// getEnv 从环境变量获取值，如果不存在则返回默认值
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
+type ServerConfig struct {
+	Port string
+	Mode string
+	Host string
+}
+
+type DatabaseConfig struct {
+	Type            string
+	Host            string
+	Port            string
+	Username        string
+	Password        string
+	DBName          string
+	Charset         string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime int
+	Dsn             string
+}
+
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+	PoolSize int
+	Addr     string
+}
+
+type JWTConfig struct {
+	Secret string
+	Expire int64
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string
+}
+
+type UploadConfig struct {
+	Path         string
+	MaxSize      int64
+	AllowedTypes []string
+}
+
+type SeckillConfig struct {
+	OrderExpireMinutes int
+	MaxQuantityPerUser int
+}
+
+var AppConfig *Config
+
+func InitConfig() error {
+	workDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("获取工作目录失败: %w", err)
 	}
-	return value
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(workDir + "/config")
+	viper.AddConfigPath(workDir)
+
+	viper.SetEnvPrefix("")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Printf("配置文件读取结果: %v", err)
+	} else {
+		log.Printf("配置文件已找到: %s", viper.ConfigFileUsed())
+	}
+
+	cfg := &Config{}
+
+	cfg.Server.Port = viperGetString("server.port", "8080")
+	cfg.Server.Mode = viperGetString("server.mode", "debug")
+	cfg.Server.Host = viperGetString("server.host", "0.0.0.0")
+
+	cfg.Database.Type = viperGetString("database.type", "mysql")
+	cfg.Database.Host = viperGetString("database.host", "localhost")
+	cfg.Database.Port = viperGetString("database.port", "3306")
+	cfg.Database.Username = viperGetString("database.username", "root")
+	cfg.Database.Password = viperGetString("database.password", "123456")
+	cfg.Database.DBName = viperGetString("database.dbname", "ticketdb")
+	cfg.Database.Charset = viperGetString("database.charset", "utf8mb4")
+
+	cfg.Database.MaxOpenConns = viper.GetInt("database.max_open_conns")
+	if cfg.Database.MaxOpenConns == 0 {
+		cfg.Database.MaxOpenConns = 100
+	}
+	cfg.Database.MaxIdleConns = viper.GetInt("database.max_idle_conns")
+	if cfg.Database.MaxIdleConns == 0 {
+		cfg.Database.MaxIdleConns = 20
+	}
+	cfg.Database.ConnMaxLifetime = viper.GetInt("database.conn_max_lifetime")
+	if cfg.Database.ConnMaxLifetime == 0 {
+		cfg.Database.ConnMaxLifetime = 3600
+	}
+	cfg.Database.Dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&loc=Local",
+		cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName, cfg.Database.Charset)
+
+	cfg.Redis.Host = viperGetString("redis.host", "localhost")
+	cfg.Redis.Port = viperGetString("redis.port", "6379")
+	cfg.Redis.Password = viperGetString("redis.password", "")
+	cfg.Redis.DB = viper.GetInt("redis.db")
+	cfg.Redis.PoolSize = viper.GetInt("redis.pool_size")
+	if cfg.Redis.PoolSize == 0 {
+		cfg.Redis.PoolSize = 100
+	}
+	cfg.Redis.Addr = fmt.Sprintf("%s:%s", cfg.Redis.Host, cfg.Redis.Port)
+
+	cfg.JWT.Secret = os.Getenv("JWT_SECRET")
+	if cfg.JWT.Secret == "" {
+		log.Fatal("JWT_SECRET 环境变量未设置，请设置 JWT_SECRET 环境变量")
+	}
+	cfg.JWT.Expire = int64(viperGetInt("jwt.expire", 7200))
+
+	corsOrigins := viperGetString("cors.allowed_origins", "http://localhost:3000,http://localhost")
+	cfg.CORS.AllowedOrigins = strings.Split(corsOrigins, ",")
+
+	cfg.Upload.Path = viperGetString("upload.path", "./uploads")
+	cfg.Upload.MaxSize = int64(viperGetInt("upload.max_size", 5242880))
+
+	cfg.Seckill.OrderExpireMinutes = viperGetInt("seckill.order_expire_minutes", 30)
+	cfg.Seckill.MaxQuantityPerUser = viperGetInt("seckill.max_quantity_per_user", 5)
+
+	AppConfig = cfg
+	log.Println("配置加载成功")
+	log.Printf("数据库: %s:%s/%s", cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
+	return nil
+}
+
+func viperGetString(key, defaultValue string) string {
+	if value := os.Getenv(strings.ReplaceAll(key, ".", "_")); value != "" {
+		return value
+	}
+	if value := viper.GetString(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func viperGetInt(key string, defaultValue int) int {
+	if value := os.Getenv(strings.ReplaceAll(key, ".", "_")); value != "" {
+		if v, err := fmt.Sscanf(value, "%d", &defaultValue); err == nil && v > 0 {
+			return v
+		}
+	}
+	if viper.IsSet(key) {
+		return viper.GetInt(key)
+	}
+	return defaultValue
+}
+
+func GetConfig() *Config {
+	if AppConfig == nil {
+		log.Fatal("配置未初始化，请先调用 InitConfig()")
+	}
+	return AppConfig
 }

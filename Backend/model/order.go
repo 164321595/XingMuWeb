@@ -26,6 +26,10 @@ type Order struct {
 	TicketType  *TicketType  `gorm:"foreignkey:TicketTypeID" json:"ticket_type,omitempty"`
 }
 
+func (Order) TableName() string {
+	return "order"
+}
+
 // OrderQuery 订单查询条件
 type OrderQuery struct {
 	UserID     int

@@ -8,13 +8,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"ticket-system-backend/model"
 	"ticket-system-backend/util"
+
+	"github.com/gin-gonic/gin"
 )
 
 // PerformanceController 演出控制器
-type PerformanceController struct {}
+type PerformanceController struct{}
 
 // GetPerformanceList 获取演出列表
 func (pc *PerformanceController) GetPerformanceList(c *gin.Context) {
@@ -37,7 +38,7 @@ func (pc *PerformanceController) GetPerformanceList(c *gin.Context) {
 	// 查询演出列表
 	performances, total, err := model.GetPerformances(query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, err.Error()))
+		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, "查询演出列表失败"))
 		return
 	}
 
@@ -64,7 +65,7 @@ func (pc *PerformanceController) GetPerformanceByID(c *gin.Context) {
 	// 查询演出详情
 	performance, err := model.GetPerformanceByID(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, err.Error()))
+		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, "获取演出详情失败"))
 		return
 	}
 
@@ -73,10 +74,9 @@ func (pc *PerformanceController) GetPerformanceByID(c *gin.Context) {
 		return
 	}
 
-	// 查询票种信息
 	ticketTypes, err := model.GetTicketTypesByPerformanceID(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, err.Error()))
+		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, "获取票种信息失败"))
 		return
 	}
 
@@ -94,7 +94,7 @@ func (pc *PerformanceController) GetCategories(c *gin.Context) {
 	// 查询所有分类
 	categories, err := model.GetAllCategories()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, err.Error()))
+		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, "获取分类列表失败"))
 		return
 	}
 
@@ -113,7 +113,7 @@ func (pc *PerformanceController) UploadCoverImage(c *gin.Context) {
 	// 检查演出是否存在
 	performance, err := model.GetPerformanceByID(performanceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, err.Error()))
+		c.JSON(http.StatusInternalServerError, util.ErrorResponse(util.StatusCodeInternalError, "获取演出信息失败"))
 		return
 	}
 	if performance == nil {
@@ -129,17 +129,10 @@ func (pc *PerformanceController) UploadCoverImage(c *gin.Context) {
 	}
 
 	// 检查文件类型
-	allowedTypes := []string{"image/jpeg", "image/png", "image/gif"}
+	allowedTypes := []string{"image/jpeg", "image/png", "image/gif", "image/webp"}
 	contentType := file.Header.Get("Content-Type")
-	isAllowed := false
-	for _, t := range allowedTypes {
-		if contentType == t {
-			isAllowed = true
-			break
-		}
-	}
-	if !isAllowed {
-		c.JSON(http.StatusBadRequest, util.ErrorResponse(util.StatusCodeBadRequest, "只允许上传JPG、PNG、GIF格式的图片"))
+	if !util.ValidateFileType(contentType, allowedTypes) {
+		c.JSON(http.StatusBadRequest, util.ErrorResponse(util.StatusCodeBadRequest, "只允许上传JPG、PNG、GIF、WebP格式的图片"))
 		return
 	}
 

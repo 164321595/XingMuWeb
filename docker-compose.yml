@@ -1,125 +1,85 @@
-networks:
-  ticket-system-network:
-    driver: bridge
-
-volumes:
-  mysql-data:
-  redis-data:
-  uploads:
-
 services:
-  # MySQL数据库服务
-  db:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.db
-    container_name: ticket-system-db
-    networks:
-      - ticket-system-network
-    volumes:
-      - mysql-data:/var/lib/mysql
-    ports:
-      - "3307:3306"
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-mysql
+    restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=123456
-      - MYSQL_DATABASE=ticketdb
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: ticketdb
+      TZ: Asia/Shanghai
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./Database:/docker-entrypoint-initdb.d:ro
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test:
-        [
-          "CMD",
-          "mysqladmin",
-          "ping",
-          "-h",
-          "localhost",
-          "-u",
-          "root",
-          "-p123456",
-        ]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
       interval: 10s
       timeout: 5s
-      retries: 3
-    restart: unless-stopped
+      retries: 5
 
-  # Redis服务
   redis:
     image: redis:7-alpine
-    container_name: ticket-system-redis
-    networks:
-      - ticket-system-network
-    volumes:
-      - redis-data:/data
+    container_name: ticket-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6399:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 3
-    restart: unless-stopped
+      retries: 5
 
-  # 后端服务
   backend:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.backend
-    container_name: ticket-system-backend
-    networks:
-      - ticket-system-network
-    volumes:
-      - uploads:/app/uploads
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: ticket-backend
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_USER=root
-      - DB_PASSWORD=123456
-      - DB_NAME=ticketdb
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      TZ: Asia/Shanghai
+      GIN_MODE: release
+      JWT_SECRET: damai_ticket_system_jwt_secret_2024_xK9mP2vL8nQ3wZ5j
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USERNAME: root
+      DATABASE_PASSWORD: root123
+      DATABASE_DBNAME: ticketdb
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
-      db:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8080/health",
-        ]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-    restart: unless-stopped
 
-  # 前端服务
-  web:
+  frontend:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.web
-    container_name: ticket-system-web
-    networks:
-      - ticket-system-network
+      context: ./Web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    container_name: ticket-frontend
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - backend
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost/",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  uploads:
